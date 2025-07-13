@@ -45,6 +45,28 @@ function update_setting($key, $value) {
 }
 
 /**
+ * Kullanıcı girdilerini temizle
+ */
+function sanitize_input($input) {
+    return htmlspecialchars(trim($input), ENT_QUOTES, 'UTF-8');
+}
+
+/**
+ * Güvenli çıktı
+ */
+function escape_output($output) {
+    return htmlspecialchars($output, ENT_QUOTES, 'UTF-8');
+}
+
+/**
+ * Yönlendirme fonksiyonu
+ */
+function redirect($url) {
+    header("Location: $url");
+    exit();
+}
+
+/**
  * Site metinlerini al
  */
 function get_site_text($key, $default = '') {
