@@ -3,8 +3,36 @@
  * Admin Service Edit Page - Services Database Integration
  */
 
-require_once '../includes/admin_config.php';
-require_admin_login();
+require_once '../../includes/config.php';
+
+// Admin yetkilendirme kontrolü
+if (!isset($_SESSION['admin_logged_in']) || $_SESSION['admin_logged_in'] !== true) {
+    redirect('../index.php');
+    exit();
+}
+
+// CSRF token validasyonu
+function validate_csrf_token($token) {
+    return isset($_SESSION['csrf_token']) && hash_equals($_SESSION['csrf_token'], $token);
+}
+
+// URL slug oluşturma
+function generate_slug($string) {
+    $string = trim($string);
+    $string = mb_strtolower($string, 'UTF-8');
+    
+    // Türkçe karakterleri değiştir
+    $turkish = ['ç', 'ğ', 'ı', 'ö', 'ş', 'ü'];
+    $english = ['c', 'g', 'i', 'o', 's', 'u'];
+    $string = str_replace($turkish, $english, $string);
+    
+    // Özel karakterleri kaldır
+    $string = preg_replace('/[^a-z0-9\s-]/', '', $string);
+    $string = preg_replace('/[\s-]+/', '-', $string);
+    $string = trim($string, '-');
+    
+    return $string;
+}
 
 $success = '';
 $error = '';

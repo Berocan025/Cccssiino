@@ -52,12 +52,42 @@ try {
     $result = $stmt->fetch();
     $stats['total_messages'] = $result ? (int)$result['count'] : 0;
 
-    // Get admin stats
-$admin_stats = get_admin_stats();
-$stats['services'] = $admin_stats['services'];
-$stats['portfolio'] = $admin_stats['portfolio'];
-$stats['gallery'] = $admin_stats['gallery_photos'] + $admin_stats['gallery_videos'];
-$stats['messages'] = $admin_stats['messages'];
+    // Services count
+    try {
+        $stmt = $pdo->query("SELECT COUNT(*) as count FROM services WHERE status = 'active'");
+        $stats['services'] = $stmt->fetch()['count'];
+    } catch (PDOException $e) {
+        $stats['services'] = 0;
+    }
+    
+    // Portfolio count  
+    try {
+        $stmt = $pdo->query("SELECT COUNT(*) as count FROM portfolio WHERE status = 'active'");
+        $stats['portfolio'] = $stmt->fetch()['count'];
+    } catch (PDOException $e) {
+        $stats['portfolio'] = 0;
+    }
+    
+    // Gallery count
+    try {
+        $stmt = $pdo->query("SELECT COUNT(*) as count FROM gallery_photos WHERE status = 'active'");
+        $gallery_photos = $stmt->fetch()['count'];
+        
+        $stmt = $pdo->query("SELECT COUNT(*) as count FROM gallery_videos WHERE status = 'active'");
+        $gallery_videos = $stmt->fetch()['count'];
+        
+        $stats['gallery'] = $gallery_photos + $gallery_videos;
+    } catch (PDOException $e) {
+        $stats['gallery'] = 0;
+    }
+    
+    // Messages count
+    try {
+        $stmt = $pdo->query("SELECT COUNT(*) as count FROM contact_messages WHERE status = 'unread'");
+        $stats['messages'] = $stmt->fetch()['count'];
+    } catch (PDOException $e) {
+        $stats['messages'] = 0;
+    }
 
     // Recent messages (last 5)
     $stmt = $pdo->prepare("SELECT * FROM contact_messages ORDER BY created_at DESC LIMIT 5");

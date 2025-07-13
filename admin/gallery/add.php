@@ -3,8 +3,18 @@
  * Admin Gallery Add Page - Gallery Photos & Videos Database Integration
  */
 
-require_once '../includes/admin_config.php';
-require_admin_login();
+require_once '../../includes/config.php';
+
+// Admin yetkilendirme kontrolü
+if (!isset($_SESSION['admin_logged_in']) || $_SESSION['admin_logged_in'] !== true) {
+    redirect('../index.php');
+    exit();
+}
+
+// CSRF token validasyonu
+function validate_csrf_token($token) {
+    return isset($_SESSION['csrf_token']) && hash_equals($_SESSION['csrf_token'], $token);
+}
 
 $success = '';
 $error = '';
