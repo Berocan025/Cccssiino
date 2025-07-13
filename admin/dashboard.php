@@ -52,11 +52,12 @@ try {
     $result = $stmt->fetch();
     $stats['total_messages'] = $result ? (int)$result['count'] : 0;
 
-    // Services count
-    $stmt = $pdo->prepare("SELECT COUNT(*) as count FROM services WHERE is_active = 1");
-    $stmt->execute();
-    $result = $stmt->fetch();
-    $stats['services'] = $result ? (int)$result['count'] : 0;
+    // Get admin stats
+$admin_stats = get_admin_stats();
+$stats['services'] = $admin_stats['services'];
+$stats['portfolio'] = $admin_stats['portfolio'];
+$stats['gallery'] = $admin_stats['gallery_photos'] + $admin_stats['gallery_videos'];
+$stats['messages'] = $admin_stats['messages'];
 
     // Recent messages (last 5)
     $stmt = $pdo->prepare("SELECT * FROM contact_messages ORDER BY created_at DESC LIMIT 5");

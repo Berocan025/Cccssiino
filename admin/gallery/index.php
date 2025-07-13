@@ -1,113 +1,252 @@
 <?php
-require_once '../../includes/config.php';
-require_once '../../includes/functions.php';
+/**
+ * Admin Gallery Management
+ * Tam Veritabanı Entegrasyonu - Gallery Photos & Videos
+ */
 
-// Admin yetkilendirme kontrolü
-if (!isset($_SESSION['admin_logged_in']) || $_SESSION['admin_logged_in'] !== true) {
-    redirect('../index.php');
-    exit();
-}
+require_once '../includes/admin_config.php';
+require_admin_login();
 
-$page_title = 'Galeri Yönetimi';
-$page_subtitle = 'Galeri fotoğraflarını ve videolarını yönet';
-$page_header = true;
+// Pagination settings
+$items_per_page = 20;
+$current_page = isset($_GET['page']) ? max(1, (int)$_GET['page']) : 1;
+$offset = ($current_page - 1) * $items_per_page;
 
-$breadcrumbs = [
-    ['title' => 'Galeri Yönetimi']
-];
+// Filters
+$type_filter = isset($_GET['type']) ? $_GET['type'] : '';
+$category_filter = isset($_GET['category']) ? (int)$_GET['category'] : 0;
+$search = isset($_GET['search']) ? trim($_GET['search']) : '';
 
-// Handle form submission
+// Process actions
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    // CSRF token kontrolü
-    if (!isset($_POST['csrf_token']) || $_POST['csrf_token'] !== $_SESSION['csrf_token']) {
-        $_SESSION['admin_error'] = 'Güvenlik hatası. Lütfen tekrar deneyin.';
-        header("Location: index.php");
-        exit();
-    }
+    $csrf_token = $_POST['csrf_token'] ?? '';
     
-    $action = sanitize_input($_POST['action'] ?? '');
-    
-    if ($action === 'toggle_status' && isset($_POST['gallery_id'])) {
-        $gallery_id = (int)$_POST['gallery_id'];
+    if (!validate_csrf_token($csrf_token)) {
+        $error = 'Güvenlik hatası!';
+    } else {
+        $action = $_POST['action'] ?? '';
         
-        // Simple toggle - just update to show activity
-        try {
-            $stmt = $pdo->prepare("UPDATE portfolio SET updated_at = NOW() WHERE id = ?");
-            if ($stmt->execute([$gallery_id])) {
-                $_SESSION['admin_success'] = 'Galeri durumu güncellendi.';
-            } else {
-                $_SESSION['admin_error'] = 'Galeri güncellenirken hata oluştu.';
+        if ($action === 'delete' && isset($_POST['id']) && isset($_POST['type'])) {
+            $id = (int)$_POST['id'];
+            $type = $_POST['type'];
+            
+            try {
+                if ($type === 'photo') {
+                    // Get photo details
+                    $stmt = $pdo->prepare("SELECT image, thumbnail FROM gallery_photos WHERE id = ?");
+                    $stmt->execute([$id]);
+                    $item = $stmt->fetch();
+                    
+                    if ($item) {
+                        // Delete image files
+                        if ($item['image'] && file_exists('../../uploads/gallery/' . $item['image'])) {
+                            unlink('../../uploads/gallery/' . $item['image']);
+                        }
+                        if ($item['thumbnail'] && file_exists('../../uploads/gallery/thumbs/' . $item['thumbnail'])) {
+                            unlink('../../uploads/gallery/thumbs/' . $item['thumbnail']);
+                        }
+                        
+                        // Delete from database
+                        $stmt = $pdo->prepare("DELETE FROM gallery_photos WHERE id = ?");
+                        $stmt->execute([$id]);
+                        
+                        $success = 'Fotoğraf başarıyla silindi!';
+                    }
+                } elseif ($type === 'video') {
+                    // Get video details
+                    $stmt = $pdo->prepare("SELECT thumbnail FROM gallery_videos WHERE id = ?");
+                    $stmt->execute([$id]);
+                    $item = $stmt->fetch();
+                    
+                    if ($item) {
+                        // Delete thumbnail file
+                        if ($item['thumbnail'] && file_exists('../../uploads/gallery/thumbs/' . $item['thumbnail'])) {
+                            unlink('../../uploads/gallery/thumbs/' . $item['thumbnail']);
+                        }
+                        
+                        // Delete from database
+                        $stmt = $pdo->prepare("DELETE FROM gallery_videos WHERE id = ?");
+                        $stmt->execute([$id]);
+                        
+                        $success = 'Video başarıyla silindi!';
+                    }
+                }
+            } catch (PDOException $e) {
+                $error = 'Silme işlemi başarısız: ' . $e->getMessage();
             }
-        } catch (PDOException $e) {
-            $_SESSION['admin_success'] = 'Galeri işaretlendi.'; // Fallback success
+        }
+        
+        if ($action === 'bulk_delete' && isset($_POST['selected_items'])) {
+            $selected_items = $_POST['selected_items']; // Array of type:id
+            
+            if (!empty($selected_items)) {
+                try {
+                    foreach ($selected_items as $item) {
+                        list($type, $id) = explode(':', $item);
+                        $id = (int)$id;
+                        
+                        if ($type === 'photo') {
+                            // Get and delete photo
+                            $stmt = $pdo->prepare("SELECT image, thumbnail FROM gallery_photos WHERE id = ?");
+                            $stmt->execute([$id]);
+                            $photo = $stmt->fetch();
+                            
+                            if ($photo) {
+                                if ($photo['image'] && file_exists('../../uploads/gallery/' . $photo['image'])) {
+                                    unlink('../../uploads/gallery/' . $photo['image']);
+                                }
+                                if ($photo['thumbnail'] && file_exists('../../uploads/gallery/thumbs/' . $photo['thumbnail'])) {
+                                    unlink('../../uploads/gallery/thumbs/' . $photo['thumbnail']);
+                                }
+                                
+                                $stmt = $pdo->prepare("DELETE FROM gallery_photos WHERE id = ?");
+                                $stmt->execute([$id]);
+                            }
+                        } elseif ($type === 'video') {
+                            // Get and delete video
+                            $stmt = $pdo->prepare("SELECT thumbnail FROM gallery_videos WHERE id = ?");
+                            $stmt->execute([$id]);
+                            $video = $stmt->fetch();
+                            
+                            if ($video) {
+                                if ($video['thumbnail'] && file_exists('../../uploads/gallery/thumbs/' . $video['thumbnail'])) {
+                                    unlink('../../uploads/gallery/thumbs/' . $video['thumbnail']);
+                                }
+                                
+                                $stmt = $pdo->prepare("DELETE FROM gallery_videos WHERE id = ?");
+                                $stmt->execute([$id]);
+                            }
+                        }
+                    }
+                    
+                    $success = count($selected_items) . ' öğe başarıyla silindi!';
+                } catch (PDOException $e) {
+                    $error = 'Toplu silme işlemi başarısız: ' . $e->getMessage();
+                }
+            }
+        }
+        
+        if ($action === 'bulk_status' && isset($_POST['selected_items']) && isset($_POST['new_status'])) {
+            $selected_items = $_POST['selected_items'];
+            $new_status = $_POST['new_status'];
+            
+            if (!empty($selected_items) && in_array($new_status, ['active', 'inactive'])) {
+                try {
+                    foreach ($selected_items as $item) {
+                        list($type, $id) = explode(':', $item);
+                        $id = (int)$id;
+                        
+                        if ($type === 'photo') {
+                            $stmt = $pdo->prepare("UPDATE gallery_photos SET status = ? WHERE id = ?");
+                            $stmt->execute([$new_status, $id]);
+                        } elseif ($type === 'video') {
+                            $stmt = $pdo->prepare("UPDATE gallery_videos SET status = ? WHERE id = ?");
+                            $stmt->execute([$new_status, $id]);
+                        }
+                    }
+                    
+                    $success = count($selected_items) . ' öğe durumu güncellendi!';
+                } catch (PDOException $e) {
+                    $error = 'Durum güncelleme başarısız: ' . $e->getMessage();
+                }
+            }
         }
     }
-    
-    if ($action === 'delete_gallery' && isset($_POST['gallery_id'])) {
-        $gallery_id = (int)$_POST['gallery_id'];
-        
-        // Delete from portfolio table directly
-        try {
-            $stmt = $pdo->prepare("DELETE FROM portfolio WHERE id = ?");
-            if ($stmt->execute([$gallery_id])) {
-                $_SESSION['admin_success'] = 'Galeri öğesi silindi.';
-            } else {
-                $_SESSION['admin_error'] = 'Galeri öğesi silinirken hata oluştu.';
-            }
-        } catch (PDOException $e) {
-            $_SESSION['admin_error'] = 'Silme işlemi başarısız.';
-        }
-    }
-    
-    header("Location: index.php");
-    exit();
 }
 
-// Get filter
-$type_filter = $_GET['type'] ?? '';
-$status_filter = $_GET['status'] ?? '';
-$search = $_GET['search'] ?? '';
+// Build WHERE clauses
+$photo_where = ['1=1'];
+$video_where = ['1=1'];
+$photo_params = [];
+$video_params = [];
 
-// Build WHERE clause
-$where_conditions = [];
-$params = [];
-
-if (!empty($type_filter)) {
-    $where_conditions[] = 'type = ?';
-    $params[] = $type_filter;
-}
-
-if ($status_filter !== '') {
-    $where_conditions[] = 'is_active = ?';
-    $params[] = (int)$status_filter;
+if ($category_filter > 0) {
+    $photo_where[] = 'category_id = ?';
+    $video_where[] = 'category_id = ?';
+    $photo_params[] = $category_filter;
+    $video_params[] = $category_filter;
 }
 
 if (!empty($search)) {
-    $where_conditions[] = '(title LIKE ? OR description LIKE ?)';
     $search_term = '%' . $search . '%';
-    $params[] = $search_term;
-    $params[] = $search_term;
+    $photo_where[] = '(title LIKE ? OR description LIKE ?)';
+    $video_where[] = '(title LIKE ? OR description LIKE ?)';
+    $photo_params[] = $search_term;
+    $photo_params[] = $search_term;
+    $video_params[] = $search_term;
+    $video_params[] = $search_term;
 }
 
-$where_clause = !empty($where_conditions) ? 'WHERE ' . implode(' AND ', $where_conditions) : '';
+$photo_where_clause = 'WHERE ' . implode(' AND ', $photo_where);
+$video_where_clause = 'WHERE ' . implode(' AND ', $video_where);
 
-// Get gallery items from portfolio table (with gallery prefix)
+// Get gallery items
+$gallery_items = [];
+
 try {
-    $query = "SELECT *, 'photo' as type FROM portfolio WHERE title LIKE 'Gallery:%' ORDER BY created_at DESC";
-    $stmt = $pdo->prepare($query);
-    $stmt->execute();
-    $gallery_items = $stmt->fetchAll();
-    
-    // Add compatibility fields
-    foreach ($gallery_items as &$item) {
-        $item['is_active'] = 1; // Default active
-        if (!isset($item['description'])) {
-            $item['description'] = '';
-        }
+    // Get photos
+    if ($type_filter === '' || $type_filter === 'photo') {
+        $count_sql = "SELECT COUNT(*) as total FROM gallery_photos $photo_where_clause";
+        $count_stmt = $pdo->prepare($count_sql);
+        $count_stmt->execute($photo_params);
+        $photo_count = $count_stmt->fetch()['total'];
+        
+        $sql = "SELECT gp.*, c.name as category_name, 'photo' as type 
+                FROM gallery_photos gp 
+                LEFT JOIN categories c ON gp.category_id = c.id 
+                $photo_where_clause 
+                ORDER BY gp.created_at DESC";
+        $stmt = $pdo->prepare($sql);
+        $stmt->execute($photo_params);
+        $photos = $stmt->fetchAll();
+        
+        $gallery_items = array_merge($gallery_items, $photos);
     }
+    
+    // Get videos
+    if ($type_filter === '' || $type_filter === 'video') {
+        $count_sql = "SELECT COUNT(*) as total FROM gallery_videos $video_where_clause";
+        $count_stmt = $pdo->prepare($count_sql);
+        $count_stmt->execute($video_params);
+        $video_count = $count_stmt->fetch()['total'];
+        
+        $sql = "SELECT gv.*, c.name as category_name, 'video' as type 
+                FROM gallery_videos gv 
+                LEFT JOIN categories c ON gv.category_id = c.id 
+                $video_where_clause 
+                ORDER BY gv.created_at DESC";
+        $stmt = $pdo->prepare($sql);
+        $stmt->execute($video_params);
+        $videos = $stmt->fetchAll();
+        
+        $gallery_items = array_merge($gallery_items, $videos);
+    }
+    
+    // Sort combined results by created_at DESC
+    usort($gallery_items, function($a, $b) {
+        return strtotime($b['created_at']) - strtotime($a['created_at']);
+    });
+    
+    // Apply pagination
+    $total_items = count($gallery_items);
+    $gallery_items = array_slice($gallery_items, $offset, $items_per_page);
+    
 } catch (PDOException $e) {
     $gallery_items = [];
+    $total_items = 0;
+    $error = 'Veri alınamadı: ' . $e->getMessage();
 }
+
+// Get categories for filter
+try {
+    $categories_stmt = $pdo->query("SELECT * FROM categories WHERE type = 'gallery' ORDER BY name");
+    $categories = $categories_stmt->fetchAll();
+} catch (PDOException $e) {
+    $categories = [];
+}
+
+// Calculate pagination
+$total_pages = ceil($total_items / $items_per_page);
 
 // Generate CSRF token
 $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
@@ -121,122 +260,302 @@ $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
             <div class="card">
                 <div class="card-header d-flex justify-content-between align-items-center">
                     <h5 class="card-title mb-0">Galeri Yönetimi</h5>
-                    <a href="add.php" class="btn btn-primary">
-                        <i class="fas fa-plus"></i> Yeni Galeri Ekle
-                    </a>
+                    <div>
+                        <a href="add.php?type=photo" class="btn btn-primary me-2">
+                            <i class="fas fa-image"></i> Fotoğraf Ekle
+                        </a>
+                        <a href="add.php?type=video" class="btn btn-success">
+                            <i class="fas fa-video"></i> Video Ekle
+                        </a>
+                    </div>
                 </div>
                 
                 <div class="card-body">
+                    <?php if (isset($success)): ?>
+                        <div class="alert alert-success alert-dismissible fade show" role="alert">
+                            <?php echo escape_output($success); ?>
+                            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                        </div>
+                    <?php endif; ?>
+                    
+                    <?php if (isset($error)): ?>
+                        <div class="alert alert-danger alert-dismissible fade show" role="alert">
+                            <?php echo escape_output($error); ?>
+                            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                        </div>
+                    <?php endif; ?>
+                    
                     <!-- Filters -->
-                    <form method="GET" class="row mb-3">
+                    <form method="GET" class="row g-3 mb-4">
                         <div class="col-md-3">
-                            <select name="type" class="form-control">
-                                <option value="">Tüm Tipler</option>
-                                <option value="photo" <?php echo $type_filter === 'photo' ? 'selected' : ''; ?>>Fotoğraf</option>
-                                <option value="video" <?php echo $type_filter === 'video' ? 'selected' : ''; ?>>Video</option>
+                            <select name="type" class="form-select">
+                                <option value="">Tüm Türler</option>
+                                <option value="photo" <?php echo $type_filter === 'photo' ? 'selected' : ''; ?>>Fotoğraflar</option>
+                                <option value="video" <?php echo $type_filter === 'video' ? 'selected' : ''; ?>>Videolar</option>
                             </select>
                         </div>
                         <div class="col-md-3">
-                            <select name="status" class="form-control">
-                                <option value="">Tüm Durumlar</option>
-                                <option value="1" <?php echo $status_filter === '1' ? 'selected' : ''; ?>>Aktif</option>
-                                <option value="0" <?php echo $status_filter === '0' ? 'selected' : ''; ?>>Pasif</option>
+                            <select name="category" class="form-select">
+                                <option value="">Tüm Kategoriler</option>
+                                <?php foreach ($categories as $category): ?>
+                                    <option value="<?php echo $category['id']; ?>" <?php echo $category_filter == $category['id'] ? 'selected' : ''; ?>>
+                                        <?php echo escape_output($category['name']); ?>
+                                    </option>
+                                <?php endforeach; ?>
                             </select>
                         </div>
                         <div class="col-md-4">
                             <input type="text" name="search" class="form-control" placeholder="Başlık veya açıklama ara..." value="<?php echo escape_output($search); ?>">
                         </div>
                         <div class="col-md-2">
-                            <button type="submit" class="btn btn-secondary">
+                            <button type="submit" class="btn btn-secondary w-100">
                                 <i class="fas fa-search"></i> Filtrele
                             </button>
                         </div>
                     </form>
                     
-                    <!-- Gallery Grid -->
-                    <div class="row">
-                        <?php if (empty($gallery_items)): ?>
-                            <div class="col-12 text-center">
-                                <p>Henüz galeri öğesi bulunmamaktadır.</p>
-                            </div>
-                        <?php else: ?>
-                            <?php foreach ($gallery_items as $item): ?>
-                                <div class="col-md-4 col-lg-3 mb-4">
-                                    <div class="card h-100">
-                                        <div class="card-img-top" style="height: 200px; background: #f8f9fa; position: relative;">
-                                            <?php if (!empty($item['image_path'])): ?>
-                                                <img src="<?php echo escape_output($item['image_path']); ?>" 
-                                                     alt="<?php echo escape_output($item['title']); ?>" 
-                                                     class="img-fluid h-100 w-100" style="object-fit: cover;">
-                                            <?php else: ?>
-                                                <div class="d-flex align-items-center justify-content-center h-100">
-                                                    <i class="fas fa-image text-muted" style="font-size: 3rem;"></i>
+                    <!-- Bulk Actions -->
+                    <form id="bulk-form" method="POST" class="mb-3">
+                        <input type="hidden" name="csrf_token" value="<?php echo $_SESSION['csrf_token']; ?>">
+                        <input type="hidden" name="action" value="">
+                        <input type="hidden" name="new_status" value="">
+                        
+                        <div class="d-flex gap-2 align-items-center">
+                            <button type="button" id="select-all" class="btn btn-sm btn-outline-primary">Tümünü Seç</button>
+                            <button type="button" onclick="bulkAction('bulk_status', 'active')" class="btn btn-sm btn-success" disabled id="bulk-activate">Aktif Yap</button>
+                            <button type="button" onclick="bulkAction('bulk_status', 'inactive')" class="btn btn-sm btn-warning" disabled id="bulk-deactivate">Pasif Yap</button>
+                            <button type="button" onclick="bulkAction('bulk_delete')" class="btn btn-sm btn-danger" disabled id="bulk-delete">Sil</button>
+                            <span id="selected-count" class="text-muted ms-2">0 öğe seçili</span>
+                        </div>
+                        
+                        <!-- Gallery Grid -->
+                        <div class="row mt-3">
+                            <?php if (empty($gallery_items)): ?>
+                                <div class="col-12">
+                                    <div class="text-center py-5">
+                                        <i class="fas fa-images fa-3x text-muted mb-3"></i>
+                                        <h5 class="text-muted">Henüz galeri öğesi eklenmemiş</h5>
+                                        <p class="text-muted">Fotoğraf veya video ekleyerek galerini oluşturmaya başla</p>
+                                        <a href="add.php?type=photo" class="btn btn-primary me-2">
+                                            <i class="fas fa-image"></i> İlk Fotoğrafı Ekle
+                                        </a>
+                                        <a href="add.php?type=video" class="btn btn-success">
+                                            <i class="fas fa-video"></i> İlk Videoyu Ekle
+                                        </a>
+                                    </div>
+                                </div>
+                            <?php else: ?>
+                                <?php foreach ($gallery_items as $item): ?>
+                                    <div class="col-md-6 col-lg-4 col-xl-3 mb-4">
+                                        <div class="card h-100">
+                                            <div class="position-relative">
+                                                <!-- Selection Checkbox -->
+                                                <div class="position-absolute top-0 start-0 p-2">
+                                                    <input type="checkbox" name="selected_items[]" 
+                                                           value="<?php echo $item['type'] . ':' . $item['id']; ?>" 
+                                                           class="form-check-input row-checkbox">
                                                 </div>
-                                            <?php endif; ?>
-                                            
-                                            <?php if (isset($item['type']) && $item['type'] === 'video'): ?>
-                                                <div class="position-absolute" style="top: 10px; left: 10px;">
-                                                    <span class="badge badge-primary">
-                                                        <i class="fas fa-play"></i> Video
+                                                
+                                                <!-- Type Badge -->
+                                                <div class="position-absolute top-0 end-0 p-2">
+                                                    <span class="badge bg-<?php echo $item['type'] === 'photo' ? 'primary' : 'success'; ?>">
+                                                        <i class="fas fa-<?php echo $item['type'] === 'photo' ? 'image' : 'video'; ?>"></i>
+                                                        <?php echo $item['type'] === 'photo' ? 'Fotoğraf' : 'Video'; ?>
                                                     </span>
                                                 </div>
-                                            <?php endif; ?>
-                                            
-                                            <div class="position-absolute" style="top: 10px; right: 10px;">
-                                                <span class="badge <?php echo $item['is_active'] ? 'badge-success' : 'badge-secondary'; ?>">
-                                                    <?php echo $item['is_active'] ? 'Aktif' : 'Pasif'; ?>
-                                                </span>
+                                                
+                                                <!-- Media Display -->
+                                                <?php if ($item['type'] === 'photo'): ?>
+                                                    <?php if ($item['image']): ?>
+                                                        <img src="../../uploads/gallery/<?php echo escape_output($item['image']); ?>" 
+                                                             class="card-img-top" style="height: 200px; object-fit: cover;" 
+                                                             alt="<?php echo escape_output($item['title']); ?>">
+                                                    <?php else: ?>
+                                                        <div class="bg-light d-flex align-items-center justify-content-center" style="height: 200px;">
+                                                            <i class="fas fa-image fa-3x text-muted"></i>
+                                                        </div>
+                                                    <?php endif; ?>
+                                                <?php else: ?>
+                                                    <?php if ($item['thumbnail']): ?>
+                                                        <img src="../../uploads/gallery/thumbs/<?php echo escape_output($item['thumbnail']); ?>" 
+                                                             class="card-img-top" style="height: 200px; object-fit: cover;" 
+                                                             alt="<?php echo escape_output($item['title']); ?>">
+                                                    <?php else: ?>
+                                                        <div class="bg-light d-flex align-items-center justify-content-center" style="height: 200px;">
+                                                            <i class="fas fa-video fa-3x text-muted"></i>
+                                                        </div>
+                                                    <?php endif; ?>
+                                                    
+                                                    <!-- Play Button Overlay -->
+                                                    <div class="position-absolute top-50 start-50 translate-middle">
+                                                        <div class="bg-dark bg-opacity-75 rounded-circle p-3">
+                                                            <i class="fas fa-play text-white"></i>
+                                                        </div>
+                                                    </div>
+                                                <?php endif; ?>
                                             </div>
-                                        </div>
-                                        
-                                        <div class="card-body">
-                                            <h6 class="card-title"><?php echo escape_output($item['title']); ?></h6>
-                                            <p class="card-text">
-                                                <small class="text-muted">
-                                                    <?php echo escape_output(substr($item['description'], 0, 100)) . '...'; ?>
-                                                </small>
-                                            </p>
-                                            <p class="card-text">
-                                                <small class="text-muted">
+                                            
+                                            <div class="card-body">
+                                                <h6 class="card-title mb-2"><?php echo escape_output($item['title']); ?></h6>
+                                                <?php if ($item['description']): ?>
+                                                    <p class="card-text small text-muted mb-2">
+                                                        <?php echo escape_output(substr($item['description'], 0, 80)); ?>...
+                                                    </p>
+                                                <?php endif; ?>
+                                                
+                                                <div class="d-flex justify-content-between align-items-center">
+                                                    <small class="text-muted">
+                                                        <?php echo $item['category_name'] ? escape_output($item['category_name']) : 'Kategori Yok'; ?>
+                                                    </small>
+                                                    <span class="badge bg-<?php echo $item['status'] === 'active' ? 'success' : 'secondary'; ?>">
+                                                        <?php echo $item['status'] === 'active' ? 'Aktif' : 'Pasif'; ?>
+                                                    </span>
+                                                </div>
+                                            </div>
+                                            
+                                            <div class="card-footer bg-transparent">
+                                                <div class="btn-group w-100">
+                                                    <a href="edit.php?id=<?php echo $item['id']; ?>&type=<?php echo $item['type']; ?>" 
+                                                       class="btn btn-outline-primary btn-sm">
+                                                        <i class="fas fa-edit"></i> Düzenle
+                                                    </a>
+                                                    <button type="button" class="btn btn-outline-danger btn-sm" 
+                                                            onclick="deleteItem(<?php echo $item['id']; ?>, '<?php echo $item['type']; ?>')">
+                                                        <i class="fas fa-trash"></i> Sil
+                                                    </button>
+                                                </div>
+                                                <small class="text-muted d-block mt-2 text-center">
                                                     <?php echo date('d.m.Y H:i', strtotime($item['created_at'])); ?>
                                                 </small>
-                                            </p>
-                                        </div>
-                                        
-                                        <div class="card-footer">
-                                            <div class="btn-group w-100" role="group">
-                                                <form method="POST" style="display: inline;">
-                                                    <input type="hidden" name="csrf_token" value="<?php echo $_SESSION['csrf_token']; ?>">
-                                                    <input type="hidden" name="action" value="toggle_status">
-                                                    <input type="hidden" name="gallery_id" value="<?php echo $item['id']; ?>">
-                                                    <button type="submit" class="btn btn-sm <?php echo $item['is_active'] ? 'btn-success' : 'btn-secondary'; ?>">
-                                                        <i class="fas fa-<?php echo $item['is_active'] ? 'eye' : 'eye-slash'; ?>"></i>
-                                                    </button>
-                                                </form>
-                                                
-                                                <a href="edit.php?id=<?php echo $item['id']; ?>" class="btn btn-sm btn-warning">
-                                                    <i class="fas fa-edit"></i>
-                                                </a>
-                                                
-                                                <form method="POST" style="display: inline;" onsubmit="return confirm('Bu galeri öğesini silmek istediğinizden emin misiniz?');">
-                                                    <input type="hidden" name="csrf_token" value="<?php echo $_SESSION['csrf_token']; ?>">
-                                                    <input type="hidden" name="action" value="delete_gallery">
-                                                    <input type="hidden" name="gallery_id" value="<?php echo $item['id']; ?>">
-                                                    <button type="submit" class="btn btn-sm btn-danger">
-                                                        <i class="fas fa-trash"></i>
-                                                    </button>
-                                                </form>
                                             </div>
                                         </div>
                                     </div>
-                                </div>
-                            <?php endforeach; ?>
-                        <?php endif; ?>
-                    </div>
+                                <?php endforeach; ?>
+                            <?php endif; ?>
+                        </div>
+                    </form>
+                    
+                    <!-- Pagination -->
+                    <?php if ($total_pages > 1): ?>
+                        <nav aria-label="Sayfa navigasyonu">
+                            <ul class="pagination justify-content-center">
+                                <?php if ($current_page > 1): ?>
+                                    <li class="page-item">
+                                        <a class="page-link" href="?page=<?php echo $current_page - 1; ?>&type=<?php echo urlencode($type_filter); ?>&category=<?php echo $category_filter; ?>&search=<?php echo urlencode($search); ?>">Önceki</a>
+                                    </li>
+                                <?php endif; ?>
+                                
+                                <?php for ($i = max(1, $current_page - 2); $i <= min($total_pages, $current_page + 2); $i++): ?>
+                                    <li class="page-item <?php echo $i === $current_page ? 'active' : ''; ?>">
+                                        <a class="page-link" href="?page=<?php echo $i; ?>&type=<?php echo urlencode($type_filter); ?>&category=<?php echo $category_filter; ?>&search=<?php echo urlencode($search); ?>"><?php echo $i; ?></a>
+                                    </li>
+                                <?php endfor; ?>
+                                
+                                <?php if ($current_page < $total_pages): ?>
+                                    <li class="page-item">
+                                        <a class="page-link" href="?page=<?php echo $current_page + 1; ?>&type=<?php echo urlencode($type_filter); ?>&category=<?php echo $category_filter; ?>&search=<?php echo urlencode($search); ?>">Sonraki</a>
+                                    </li>
+                                <?php endif; ?>
+                            </ul>
+                        </nav>
+                        
+                        <div class="text-center mt-2">
+                            <small class="text-muted">
+                                Toplam <?php echo $total_items; ?> kayıttan <?php echo min($offset + 1, $total_items); ?>-<?php echo min($offset + $items_per_page, $total_items); ?> arası gösteriliyor
+                            </small>
+                        </div>
+                    <?php endif; ?>
                 </div>
             </div>
         </div>
     </div>
 </div>
+
+<!-- Delete Modal -->
+<div class="modal fade" id="deleteModal" tabindex="-1" aria-labelledby="deleteModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="deleteModalLabel">Galeri Öğesini Sil</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                Bu galeri öğesini silmek istediğinizden emin misiniz? Bu işlem geri alınamaz.
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">İptal</button>
+                <form method="POST" style="display: inline;">
+                    <input type="hidden" name="csrf_token" value="<?php echo $_SESSION['csrf_token']; ?>">
+                    <input type="hidden" name="action" value="delete">
+                    <input type="hidden" name="id" id="delete-id">
+                    <input type="hidden" name="type" id="delete-type">
+                    <button type="submit" class="btn btn-danger">Sil</button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+function deleteItem(id, type) {
+    document.getElementById('delete-id').value = id;
+    document.getElementById('delete-type').value = type;
+    new bootstrap.Modal(document.getElementById('deleteModal')).show();
+}
+
+// Bulk selection functionality
+document.addEventListener('DOMContentLoaded', function() {
+    const rowCheckboxes = document.querySelectorAll('.row-checkbox');
+    const selectedCount = document.getElementById('selected-count');
+    const bulkButtons = document.querySelectorAll('#bulk-activate, #bulk-deactivate, #bulk-delete');
+    
+    function updateBulkButtons() {
+        const checkedBoxes = document.querySelectorAll('.row-checkbox:checked');
+        const count = checkedBoxes.length;
+        
+        selectedCount.textContent = count + ' öğe seçili';
+        
+        bulkButtons.forEach(button => {
+            button.disabled = count === 0;
+        });
+    }
+    
+    rowCheckboxes.forEach(checkbox => {
+        checkbox.addEventListener('change', updateBulkButtons);
+    });
+    
+    document.getElementById('select-all').addEventListener('click', function() {
+        const allChecked = Array.from(rowCheckboxes).every(cb => cb.checked);
+        rowCheckboxes.forEach(checkbox => {
+            checkbox.checked = !allChecked;
+        });
+        updateBulkButtons();
+    });
+});
+
+function bulkAction(action, status = '') {
+    const checkedBoxes = document.querySelectorAll('.row-checkbox:checked');
+    if (checkedBoxes.length === 0) {
+        alert('Lütfen en az bir öğe seçin.');
+        return;
+    }
+    
+    let message = '';
+    if (action === 'bulk_delete') {
+        message = checkedBoxes.length + ' öğeyi silmek istediğinizden emin misiniz?';
+    } else if (action === 'bulk_status') {
+        message = checkedBoxes.length + ' öğenin durumunu değiştirmek istediğinizden emin misiniz?';
+    }
+    
+    if (confirm(message)) {
+        const form = document.getElementById('bulk-form');
+        form.querySelector('input[name="action"]').value = action;
+        if (status) {
+            form.querySelector('input[name="new_status"]').value = status;
+        }
+        form.submit();
+    }
+}
+</script>
 
 <?php include '../includes/admin_footer.php'; ?>
