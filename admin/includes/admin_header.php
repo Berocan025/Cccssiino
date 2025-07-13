@@ -1,6 +1,13 @@
 <?php
+// Admin yetkilendirme kontrolü
 if (!isset($_SESSION['admin_logged_in']) || $_SESSION['admin_logged_in'] !== true) {
     redirect('index.php');
+    exit();
+}
+
+// CSRF token kontrolü
+if (!isset($_SESSION['csrf_token'])) {
+    $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
 }
 
 $current_page = basename($_SERVER['PHP_SELF']);

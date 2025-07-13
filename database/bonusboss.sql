@@ -29,9 +29,9 @@ CREATE TABLE `users` (
   UNIQUE KEY `email` (`email`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
--- Varsayılan admin kullanıcı ekleme
+-- Varsayılan admin kullanıcı ekleme (şifre: admin123)
 INSERT INTO `users` (`username`, `email`, `password`, `full_name`, `role`) VALUES
-('admin', 'admin@bonusboss.com', '$2y$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uheWG/igi', 'BonusBoss Admin', 'admin');
+('admin', 'admin@bonusboss.com', '$2y$10$TKh8H1.PfQx37YgCzwiKb.KjNyWgaHb9cbcoQgdIVFlYg7B77UdFm', 'BonusBoss Admin', 'admin');
 
 -- --------------------------------------------------------
 

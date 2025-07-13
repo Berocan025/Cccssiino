@@ -1146,11 +1146,14 @@ a:hover {
     position: fixed;
     bottom: 20px;
     right: 20px;
-    z-index: var(--z-fixed);
+    z-index: 1000;
+    max-width: 60px;
+    max-height: 60px;
 }
 
 .telegram-float {
-    right: 80px;
+    bottom: 90px;
+    right: 20px;
 }
 
 .whatsapp-btn,
@@ -1446,11 +1449,13 @@ a:hover {
     .telegram-float {
         bottom: 15px;
         right: 15px;
+        max-width: 55px;
+        max-height: 55px;
     }
     
     .telegram-float {
         right: 15px;
-        bottom: 85px;
+        bottom: 80px;
     }
     
     .scroll-to-top {
@@ -1500,18 +1505,22 @@ a:hover {
     .telegram-float {
         bottom: 10px;
         right: 10px;
+        max-width: 50px;
+        max-height: 50px;
     }
     
     .telegram-float {
         right: 10px;
-        bottom: 75px;
+        bottom: 70px;
     }
     
     .whatsapp-btn,
     .telegram-btn {
-        width: 50px;
-        height: 50px;
-        font-size: var(--font-size-lg);
+        width: 50px !important;
+        height: 50px !important;
+        font-size: 18px !important;
+        min-width: 50px;
+        min-height: 50px;
     }
 }
 

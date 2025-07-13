@@ -2,6 +2,12 @@
 require_once '../../includes/config.php';
 require_once '../../includes/functions.php';
 
+// Admin yetkilendirme kontrolü
+if (!isset($_SESSION['admin_logged_in']) || $_SESSION['admin_logged_in'] !== true) {
+    redirect('../index.php');
+    exit();
+}
+
 $page_title = 'Mesaj Yönetimi';
 $page_subtitle = 'Gelen mesajları görüntüle ve yönet';
 $page_header = true;
@@ -12,7 +18,14 @@ $breadcrumbs = [
 
 // Handle actions
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    $action = $_POST['action'] ?? '';
+    // CSRF token kontrolü
+    if (!isset($_POST['csrf_token']) || $_POST['csrf_token'] !== $_SESSION['csrf_token']) {
+        $_SESSION['admin_error'] = 'Güvenlik hatası. Lütfen tekrar deneyin.';
+        header("Location: index.php");
+        exit();
+    }
+    
+    $action = sanitize_input($_POST['action'] ?? '');
     
     if ($action === 'mark_read' && isset($_POST['message_id'])) {
         $message_id = (int)$_POST['message_id'];

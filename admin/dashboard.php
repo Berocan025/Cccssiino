@@ -2,60 +2,101 @@
 require_once '../includes/config.php';
 require_once '../includes/functions.php';
 
+// Admin yetkilendirme kontrolü
+if (!isset($_SESSION['admin_logged_in']) || $_SESSION['admin_logged_in'] !== true) {
+    redirect('../admin/index.php');
+    exit();
+}
+
 $page_title = 'Dashboard';
-$page_subtitle = 'Hoş geldiniz, ' . $_SESSION['admin_username'];
+$page_subtitle = 'Hoş geldiniz, ' . htmlspecialchars($_SESSION['admin_username']);
 $page_header = true;
 
 // Get statistics
 $stats = [];
 
-// Portfolio items count
-$stmt = $pdo->query("SELECT COUNT(*) as count FROM portfolio WHERE is_active = 1");
-$stats['portfolio'] = $stmt->fetch()['count'];
+try {
+    // Portfolio items count
+    $stmt = $pdo->prepare("SELECT COUNT(*) as count FROM portfolio WHERE is_active = 1");
+    $stmt->execute();
+    $result = $stmt->fetch();
+    $stats['portfolio'] = $result ? (int)$result['count'] : 0;
 
-// Total portfolio items
-$stmt = $pdo->query("SELECT COUNT(*) as count FROM portfolio");
-$stats['portfolio_total'] = $stmt->fetch()['count'];
+    // Total portfolio items
+    $stmt = $pdo->prepare("SELECT COUNT(*) as count FROM portfolio");
+    $stmt->execute();
+    $result = $stmt->fetch();
+    $stats['portfolio_total'] = $result ? (int)$result['count'] : 0;
 
-// Gallery photos count
-$stmt = $pdo->query("SELECT COUNT(*) as count FROM gallery_photos WHERE is_active = 1");
-$stats['gallery_photos'] = $stmt->fetch()['count'];
+    // Gallery photos count
+    $stmt = $pdo->prepare("SELECT COUNT(*) as count FROM gallery_photos WHERE is_active = 1");
+    $stmt->execute();
+    $result = $stmt->fetch();
+    $stats['gallery_photos'] = $result ? (int)$result['count'] : 0;
 
-// Gallery videos count
-$stmt = $pdo->query("SELECT COUNT(*) as count FROM gallery_videos WHERE is_active = 1");
-$stats['gallery_videos'] = $stmt->fetch()['count'];
+    // Gallery videos count
+    $stmt = $pdo->prepare("SELECT COUNT(*) as count FROM gallery_videos WHERE is_active = 1");
+    $stmt->execute();
+    $result = $stmt->fetch();
+    $stats['gallery_videos'] = $result ? (int)$result['count'] : 0;
 
-// Contact messages count
-$stmt = $pdo->query("SELECT COUNT(*) as count FROM contact_messages WHERE is_read = 0");
-$stats['unread_messages'] = $stmt->fetch()['count'];
+    // Contact messages count
+    $stmt = $pdo->prepare("SELECT COUNT(*) as count FROM contact_messages WHERE is_read = 0");
+    $stmt->execute();
+    $result = $stmt->fetch();
+    $stats['unread_messages'] = $result ? (int)$result['count'] : 0;
 
-// Total messages
-$stmt = $pdo->query("SELECT COUNT(*) as count FROM contact_messages");
-$stats['total_messages'] = $stmt->fetch()['count'];
+    // Total messages
+    $stmt = $pdo->prepare("SELECT COUNT(*) as count FROM contact_messages");
+    $stmt->execute();
+    $result = $stmt->fetch();
+    $stats['total_messages'] = $result ? (int)$result['count'] : 0;
 
-// Services count
-$stmt = $pdo->query("SELECT COUNT(*) as count FROM services WHERE is_active = 1");
-$stats['services'] = $stmt->fetch()['count'];
+    // Services count
+    $stmt = $pdo->prepare("SELECT COUNT(*) as count FROM services WHERE is_active = 1");
+    $stmt->execute();
+    $result = $stmt->fetch();
+    $stats['services'] = $result ? (int)$result['count'] : 0;
 
-// Recent messages (last 5)
-$stmt = $pdo->query("SELECT * FROM contact_messages ORDER BY created_at DESC LIMIT 5");
-$recent_messages = $stmt->fetchAll();
+    // Recent messages (last 5)
+    $stmt = $pdo->prepare("SELECT * FROM contact_messages ORDER BY created_at DESC LIMIT 5");
+    $stmt->execute();
+    $recent_messages = $stmt->fetchAll();
 
-// Recent portfolio items (last 5)
-$stmt = $pdo->query("SELECT * FROM portfolio ORDER BY created_at DESC LIMIT 5");
-$recent_portfolio = $stmt->fetchAll();
+    // Recent portfolio items (last 5)
+    $stmt = $pdo->prepare("SELECT * FROM portfolio ORDER BY created_at DESC LIMIT 5");
+    $stmt->execute();
+    $recent_portfolio = $stmt->fetchAll();
 
-// Monthly statistics for chart
-$stmt = $pdo->query("
-    SELECT 
-        MONTH(created_at) as month,
-        COUNT(*) as count
-    FROM contact_messages 
-    WHERE YEAR(created_at) = YEAR(NOW())
-    GROUP BY MONTH(created_at)
-    ORDER BY month
-");
-$monthly_messages = $stmt->fetchAll();
+    // Monthly statistics for chart
+    $stmt = $pdo->prepare("
+        SELECT 
+            MONTH(created_at) as month,
+            COUNT(*) as count
+        FROM contact_messages 
+        WHERE YEAR(created_at) = YEAR(NOW())
+        GROUP BY MONTH(created_at)
+        ORDER BY month
+    ");
+    $stmt->execute();
+    $monthly_messages = $stmt->fetchAll();
+
+} catch (PDOException $e) {
+    // Hata durumunda varsayılan değerler
+    $stats = [
+        'portfolio' => 0,
+        'portfolio_total' => 0,
+        'gallery_photos' => 0,
+        'gallery_videos' => 0,
+        'unread_messages' => 0,
+        'total_messages' => 0,
+        'services' => 0
+    ];
+    $recent_messages = [];
+    $recent_portfolio = [];
+    $monthly_messages = [];
+    error_log("Dashboard stats error: " . $e->getMessage());
+}
 
 include 'includes/admin_header.php';
 ?>

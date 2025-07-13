@@ -2,27 +2,32 @@
 require_once '../../includes/config.php';
 require_once '../../includes/functions.php';
 
-// Check if user is logged in
+// Admin yetkilendirme kontrolü
 if (!isset($_SESSION['admin_logged_in']) || $_SESSION['admin_logged_in'] !== true) {
     http_response_code(403);
-    exit('Unauthorized');
+    exit('Yetkisiz Erişim');
 }
 
 $message_id = isset($_GET['id']) ? (int)$_GET['id'] : 0;
 
-if (!$message_id) {
+if (!$message_id || $message_id <= 0) {
     http_response_code(400);
-    exit('Invalid message ID');
+    exit('Geçersiz mesaj ID');
 }
 
 // Get message details
-$stmt = $pdo->prepare("SELECT * FROM contact_messages WHERE id = ?");
-$stmt->execute([$message_id]);
-$message = $stmt->fetch();
+try {
+    $stmt = $pdo->prepare("SELECT * FROM contact_messages WHERE id = ?");
+    $stmt->execute([$message_id]);
+    $message = $stmt->fetch();
 
-if (!$message) {
-    http_response_code(404);
-    exit('Message not found');
+    if (!$message) {
+        http_response_code(404);
+        exit('Mesaj bulunamadı');
+    }
+} catch (PDOException $e) {
+    http_response_code(500);
+    exit('Veritabanı hatası');
 }
 
 // Mark as read when viewed

@@ -2,6 +2,12 @@
 require_once '../../includes/config.php';
 require_once '../../includes/functions.php';
 
+// Admin yetkilendirme kontrolü
+if (!isset($_SESSION['admin_logged_in']) || $_SESSION['admin_logged_in'] !== true) {
+    redirect('../index.php');
+    exit();
+}
+
 $page_title = 'Site Ayarları';
 $page_subtitle = 'Genel site ayarlarını düzenle';
 $page_header = true;
@@ -12,7 +18,14 @@ $breadcrumbs = [
 
 // Handle form submission
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    $action = $_POST['action'] ?? '';
+    // CSRF token kontrolü
+    if (!isset($_POST['csrf_token']) || $_POST['csrf_token'] !== $_SESSION['csrf_token']) {
+        $_SESSION['admin_error'] = 'Güvenlik hatası. Lütfen tekrar deneyin.';
+        header("Location: index.php");
+        exit();
+    }
+    
+    $action = sanitize_input($_POST['action'] ?? '');
     
     if ($action === 'update_settings') {
         $updates = 0;

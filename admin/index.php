@@ -11,18 +11,30 @@ $error = '';
 $success = '';
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    $username = sanitize_input($_POST['username']);
-    $password = $_POST['password'];
+    // Rate limiting - basit IP bazlı kontrol
+    $ip = $_SERVER['REMOTE_ADDR'];
+    $attempt_key = 'login_attempts_' . $ip;
     
-    if (empty($username) || empty($password)) {
-        $error = 'Kullanıcı adı ve şifre gereklidir.';
+    if (!isset($_SESSION[$attempt_key])) {
+        $_SESSION[$attempt_key] = ['count' => 0, 'last_attempt' => 0];
+    }
+    
+    // 5 dakika içinde 5'ten fazla deneme varsa engelle
+    if ($_SESSION[$attempt_key]['count'] >= 5 && (time() - $_SESSION[$attempt_key]['last_attempt']) < 300) {
+        $error = 'Çok fazla başarısız deneme. 5 dakika sonra tekrar deneyin.';
     } else {
-        $stmt = $pdo->prepare("SELECT id, username, password, is_active FROM users WHERE username = ? AND role = 'admin'");
+        $username = sanitize_input($_POST['username'] ?? '');
+        $password = $_POST['password'] ?? '';
+        
+        if (empty($username) || empty($password)) {
+            $error = 'Kullanıcı adı ve şifre gereklidir.';
+        } else {
+        $stmt = $pdo->prepare("SELECT id, username, password, status FROM users WHERE username = ? AND role = 'admin'");
         $stmt->execute([$username]);
         $user = $stmt->fetch();
         
         if ($user && password_verify($password, $user['password'])) {
-            if ($user['is_active']) {
+            if ($user['status'] === 'active') {
                 $_SESSION['admin_logged_in'] = true;
                 $_SESSION['admin_user_id'] = $user['id'];
                 $_SESSION['admin_username'] = $user['username'];
@@ -32,12 +44,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $stmt = $pdo->prepare("UPDATE users SET last_login = NOW() WHERE id = ?");
                 $stmt->execute([$user['id']]);
                 
+                // Başarılı giriş - sayacı sıfırla
+                $_SESSION[$attempt_key] = ['count' => 0, 'last_attempt' => 0];
+                
                 redirect('dashboard.php');
             } else {
                 $error = 'Hesabınız aktif değil.';
+                $_SESSION[$attempt_key]['count']++;
+                $_SESSION[$attempt_key]['last_attempt'] = time();
             }
         } else {
             $error = 'Kullanıcı adı veya şifre hatalı.';
+            $_SESSION[$attempt_key]['count']++;
+            $_SESSION[$attempt_key]['last_attempt'] = time();
+        }
         }
     }
 }
