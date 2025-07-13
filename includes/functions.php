@@ -52,18 +52,24 @@ function sanitize_input($input) {
 }
 
 /**
- * Güvenli çıktı
+ * Tüm site ayarlarını al
  */
-function escape_output($output) {
-    return htmlspecialchars($output, ENT_QUOTES, 'UTF-8');
-}
-
-/**
- * Yönlendirme fonksiyonu
- */
-function redirect($url) {
-    header("Location: $url");
-    exit();
+function get_site_settings() {
+    global $pdo;
+    
+    try {
+        $stmt = $pdo->query("SELECT setting_key, setting_value FROM settings");
+        $settings = [];
+        
+        while ($row = $stmt->fetch()) {
+            $settings[$row['setting_key']] = $row['setting_value'];
+        }
+        
+        return $settings;
+    } catch (PDOException $e) {
+        write_log("Settings error: " . $e->getMessage(), 'error');
+        return [];
+    }
 }
 
 /**
