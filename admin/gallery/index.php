@@ -94,15 +94,22 @@ if (!empty($search)) {
 
 $where_clause = !empty($where_conditions) ? 'WHERE ' . implode(' AND ', $where_conditions) : '';
 
-// Get gallery items
-$query = "SELECT * FROM gallery $where_clause ORDER BY created_at DESC";
-
+// Get gallery items - Use portfolio table as fallback
 try {
+    $query = "SELECT * FROM gallery $where_clause ORDER BY created_at DESC";
     $stmt = $pdo->prepare($query);
     $stmt->execute($params);
     $gallery_items = $stmt->fetchAll();
 } catch (PDOException $e) {
-    $gallery_items = [];
+    // Fallback to portfolio table
+    try {
+        $query = "SELECT *, 'photo' as type FROM portfolio WHERE title LIKE 'Gallery:%' OR title LIKE '%galeri%' ORDER BY created_at DESC";
+        $stmt = $pdo->prepare($query);
+        $stmt->execute();
+        $gallery_items = $stmt->fetchAll();
+    } catch (PDOException $e2) {
+        $gallery_items = [];
+    }
 }
 
 // Generate CSRF token

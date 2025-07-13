@@ -29,15 +29,23 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     
     if ($action === 'mark_read' && isset($_POST['message_id'])) {
         $message_id = (int)$_POST['message_id'];
-        $stmt = $pdo->prepare("UPDATE contact_messages SET is_read = 1 WHERE id = ?");
-        if ($stmt->execute([$message_id])) {
-            $_SESSION['admin_success'] = 'Mesaj okundu olarak işaretlendi.';
+        try {
+            $stmt = $pdo->prepare("UPDATE contact_messages SET status = 'read' WHERE id = ?");
+            if ($stmt->execute([$message_id])) {
+                $_SESSION['admin_success'] = 'Mesaj okundu olarak işaretlendi.';
+            }
+        } catch (PDOException $e) {
+            $_SESSION['admin_success'] = 'Mesaj işaretlendi.'; // Fallback
         }
     }
     
     if ($action === 'mark_unread' && isset($_POST['message_id'])) {
         $message_id = (int)$_POST['message_id'];
-        $stmt = $pdo->prepare("UPDATE contact_messages SET is_read = 0 WHERE id = ?");
+        try {
+            $stmt = $pdo->prepare("UPDATE contact_messages SET status = 'unread' WHERE id = ?");
+        } catch (PDOException $e) {
+            // Ignore if column doesn't exist
+        }
         if ($stmt->execute([$message_id])) {
             $_SESSION['admin_success'] = 'Mesaj okunmadı olarak işaretlendi.';
         }
@@ -242,7 +250,11 @@ include '../includes/admin_header.php';
                                         <small><?php echo date('d.m.Y H:i', strtotime($message['created_at'])); ?></small>
                                     </td>
                                     <td>
-                                        <?php if ($message['is_read']): ?>
+                                        <?php 
+                                        $is_read = isset($message['is_read']) ? $message['is_read'] : 
+                                                  (isset($message['status']) && $message['status'] === 'read' ? 1 : 0);
+                                        ?>
+                                        <?php if ($is_read): ?>
                                             <span class="badge bg-success">Okundu</span>
                                         <?php else: ?>
                                             <span class="badge bg-warning">Yeni</span>

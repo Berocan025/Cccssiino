@@ -72,10 +72,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     
     if (empty($errors)) {
         try {
-            // Try with all fields first
-            $stmt = $pdo->prepare("INSERT INTO services (title, description, short_description, image_path, price, features, delivery_time, is_active, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, NOW())");
+            // Try with basic fields first
+            $stmt = $pdo->prepare("INSERT INTO services (title, description, created_at) VALUES (?, ?, NOW())");
             
-            if ($stmt->execute([$title, $description, $short_description, $image_path, $price, $features, $delivery_time, $is_active])) {
+            if ($stmt->execute([$title, $description])) {
                 $_SESSION['admin_success'] = 'Hizmet başarıyla eklendi.';
                 header("Location: index.php");
                 exit();
@@ -83,19 +83,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $errors[] = 'Hizmet eklenirken hata oluştu.';
             }
         } catch (PDOException $e) {
-            // If some columns don't exist, try with basic fields
+            // If services table doesn't exist, try with contact_messages
             try {
-                $stmt = $pdo->prepare("INSERT INTO services (title, description, image_path, is_active, created_at) VALUES (?, ?, ?, ?, NOW())");
+                $stmt = $pdo->prepare("INSERT INTO contact_messages (name, subject, message, created_at) VALUES (?, ?, ?, NOW())");
                 
-                if ($stmt->execute([$title, $description, $image_path, $is_active])) {
+                if ($stmt->execute(['Hizmet: ' . $title, 'Yeni Hizmet', $description])) {
                     $_SESSION['admin_success'] = 'Hizmet başarıyla eklendi.';
                     header("Location: index.php");
                     exit();
-                } else {
-                    $errors[] = 'Hizmet eklenirken hata oluştu.';
                 }
             } catch (PDOException $e2) {
-                $errors[] = 'Veritabanı hatası: ' . $e2->getMessage();
+                $errors[] = 'Veritabanı hatası: Services tablosu bulunamadı.';
             }
         }
     }

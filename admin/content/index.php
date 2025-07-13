@@ -41,24 +41,29 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if ($action === 'delete_service' && isset($_POST['service_id'])) {
         $service_id = (int)$_POST['service_id'];
         
-        // Get service info for file deletion
-        $stmt = $pdo->prepare("SELECT image_path FROM services WHERE id = ?");
-        $stmt->execute([$service_id]);
-        $service = $stmt->fetch();
-        
-        if ($service) {
-            // Delete file if exists
-            if (!empty($service['image_path']) && file_exists($service['image_path'])) {
+        // Try to get service info for file deletion
+        try {
+            $stmt = $pdo->prepare("SELECT image_path FROM services WHERE id = ?");
+            $stmt->execute([$service_id]);
+            $service = $stmt->fetch();
+            
+            if ($service && !empty($service['image_path']) && file_exists($service['image_path'])) {
                 unlink($service['image_path']);
             }
-            
-            // Delete from database
+        } catch (PDOException $e) {
+            // image_path column doesn't exist, skip file deletion
+        }
+        
+        // Delete from database
+        try {
             $stmt = $pdo->prepare("DELETE FROM services WHERE id = ?");
             if ($stmt->execute([$service_id])) {
                 $_SESSION['admin_success'] = 'Hizmet silindi.';
             } else {
                 $_SESSION['admin_error'] = 'Hizmet silinirken hata oluştu.';
             }
+        } catch (PDOException $e) {
+            $_SESSION['admin_error'] = 'Hizmet silinirken hata oluştu: ' . $e->getMessage();
         }
     }
     
@@ -171,7 +176,11 @@ $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
                                                 <strong><?php echo escape_output($service['title']); ?></strong>
                                             </td>
                                             <td>
-                                                <small class="text-muted"><?php echo escape_output(substr($service['description'] ?? 'Açıklama bulunmuyor', 0, 150)) . '...'; ?></small>
+                                                <?php if (!empty($service['description'])): ?>
+                                                    <small class="text-muted"><?php echo escape_output(substr($service['description'], 0, 150)) . '...'; ?></small>
+                                                <?php else: ?>
+                                                    <small class="text-muted"><em>Açıklama eklenmemiş</em></small>
+                                                <?php endif; ?>
                                             </td>
                                             <td>
                                                 <form method="POST" style="display: inline;">

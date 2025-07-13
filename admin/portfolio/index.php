@@ -102,19 +102,31 @@ if (!empty($search)) {
 
 $where_clause = !empty($where_conditions) ? 'WHERE ' . implode(' AND ', $where_conditions) : '';
 
-// Get portfolio items
-$query = "SELECT p.*, pc.name as category_name 
-          FROM portfolio p 
-          LEFT JOIN portfolio_categories pc ON p.category_id = pc.id 
-          $where_clause 
-          ORDER BY p.created_at DESC";
-
+// Get portfolio items with safe query
 try {
+    $query = "SELECT p.*, pc.name as category_name 
+              FROM portfolio p 
+              LEFT JOIN portfolio_categories pc ON p.category_id = pc.id 
+              $where_clause 
+              ORDER BY p.created_at DESC";
     $stmt = $pdo->prepare($query);
     $stmt->execute($params);
     $portfolios = $stmt->fetchAll();
 } catch (PDOException $e) {
-    $portfolios = [];
+    // Fallback with basic query
+    try {
+        $query = "SELECT * FROM portfolio $where_clause ORDER BY created_at DESC";
+        $stmt = $pdo->prepare($query);
+        $stmt->execute($params);
+        $portfolios = $stmt->fetchAll();
+        
+        // Add empty category_name for compatibility
+        foreach ($portfolios as &$portfolio) {
+            $portfolio['category_name'] = 'Kategorisiz';
+        }
+    } catch (PDOException $e2) {
+        $portfolios = [];
+    }
 }
 
 // Generate CSRF token

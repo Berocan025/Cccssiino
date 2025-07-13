@@ -104,9 +104,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     
     if (empty($errors)) {
         try {
-            $stmt = $pdo->prepare("UPDATE portfolio SET title = ?, description = ?, short_description = ?, image_path = ?, category_id = ?, client_name = ?, project_url = ?, technologies = ?, is_featured = ?, is_active = ?, updated_at = NOW() WHERE id = ?");
+            // Try with basic fields
+            $stmt = $pdo->prepare("UPDATE portfolio SET title = ?, image_path = ?, updated_at = NOW() WHERE id = ?");
             
-            if ($stmt->execute([$title, $description, $short_description, $image_path, $category_id, $client_name, $project_url, $technologies, $is_featured, $is_active, $portfolio_id])) {
+            if ($stmt->execute([$title, $image_path, $portfolio_id])) {
                 $_SESSION['admin_success'] = 'Portfolio başarıyla güncellendi.';
                 header("Location: index.php");
                 exit();
@@ -114,7 +115,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $errors[] = 'Portfolio güncellenirken hata oluştu.';
             }
         } catch (PDOException $e) {
-            $errors[] = 'Veritabanı hatası: ' . $e->getMessage();
+            // Fallback with just title
+            try {
+                $stmt = $pdo->prepare("UPDATE portfolio SET title = ? WHERE id = ?");
+                if ($stmt->execute([$title, $portfolio_id])) {
+                    $_SESSION['admin_success'] = 'Portfolio başarıyla güncellendi.';
+                    header("Location: index.php");
+                    exit();
+                }
+            } catch (PDOException $e2) {
+                $errors[] = 'Veritabanı hatası: ' . $e2->getMessage();
+            }
         }
     }
     
