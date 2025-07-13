@@ -1,4 +1,4 @@
-<?php
+THIS SHOULD BE A LINTER ERROR<?php
 if (!isset($_SESSION['admin_logged_in']) || $_SESSION['admin_logged_in'] !== true) {
     redirect('index.php');
 }
