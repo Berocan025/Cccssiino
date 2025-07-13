@@ -271,6 +271,10 @@ a:hover {
     position: relative;
     background: var(--gradient-bg);
     overflow: hidden;
+    /* Ensure hero doesn't get affected by floating buttons */
+    width: 100%;
+    max-width: 100vw;
+    box-sizing: border-box;
 }
 
 .hero::before {
@@ -1146,9 +1150,11 @@ a:hover {
     position: fixed;
     bottom: 20px;
     right: 20px;
-    z-index: 1000;
+    z-index: 999;
     max-width: 60px;
     max-height: 60px;
+    /* Prevent buttons from affecting hero width */
+    pointer-events: auto;
 }
 
 .telegram-float {
@@ -1168,6 +1174,9 @@ a:hover {
     box-shadow: var(--shadow-lg);
     transition: var(--transition-fast);
     animation: float 3s ease-in-out infinite;
+    text-decoration: none;
+    border: none;
+    outline: none;
 }
 
 .whatsapp-btn {
@@ -1184,6 +1193,7 @@ a:hover {
 .telegram-btn:hover {
     transform: scale(1.1);
     color: var(--light-color);
+    text-decoration: none;
 }
 
 @keyframes float {
