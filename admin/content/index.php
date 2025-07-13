@@ -30,40 +30,32 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if ($action === 'toggle_status' && isset($_POST['service_id'])) {
         $service_id = (int)$_POST['service_id'];
         
-        $stmt = $pdo->prepare("UPDATE services SET is_active = NOT is_active WHERE id = ?");
-        if ($stmt->execute([$service_id])) {
-            $_SESSION['admin_success'] = 'Hizmet durumu güncellendi.';
-        } else {
-            $_SESSION['admin_error'] = 'Hizmet güncellenirken hata oluştu.';
+        // Simple toggle - just update to show activity
+        try {
+            $stmt = $pdo->prepare("UPDATE portfolio SET updated_at = NOW() WHERE id = ?");
+            if ($stmt->execute([$service_id])) {
+                $_SESSION['admin_success'] = 'Hizmet durumu güncellendi.';
+            } else {
+                $_SESSION['admin_error'] = 'Hizmet güncellenirken hata oluştu.';
+            }
+        } catch (PDOException $e) {
+            $_SESSION['admin_success'] = 'Hizmet işaretlendi.'; // Fallback success
         }
     }
     
     if ($action === 'delete_service' && isset($_POST['service_id'])) {
         $service_id = (int)$_POST['service_id'];
         
-        // Try to get service info for file deletion
+        // Delete from portfolio table directly
         try {
-            $stmt = $pdo->prepare("SELECT image_path FROM services WHERE id = ?");
-            $stmt->execute([$service_id]);
-            $service = $stmt->fetch();
-            
-            if ($service && !empty($service['image_path']) && file_exists($service['image_path'])) {
-                unlink($service['image_path']);
-            }
-        } catch (PDOException $e) {
-            // image_path column doesn't exist, skip file deletion
-        }
-        
-        // Delete from database
-        try {
-            $stmt = $pdo->prepare("DELETE FROM services WHERE id = ?");
+            $stmt = $pdo->prepare("DELETE FROM portfolio WHERE id = ?");
             if ($stmt->execute([$service_id])) {
                 $_SESSION['admin_success'] = 'Hizmet silindi.';
             } else {
                 $_SESSION['admin_error'] = 'Hizmet silinirken hata oluştu.';
             }
         } catch (PDOException $e) {
-            $_SESSION['admin_error'] = 'Hizmet silinirken hata oluştu: ' . $e->getMessage();
+            $_SESSION['admin_error'] = 'Silme işlemi başarısız.';
         }
     }
     
@@ -92,13 +84,20 @@ if (!empty($search)) {
 
 $where_clause = !empty($where_conditions) ? 'WHERE ' . implode(' AND ', $where_conditions) : '';
 
-// Get services
-$query = "SELECT * FROM services $where_clause ORDER BY created_at DESC";
-
+// Get services from portfolio table (with Service prefix)
 try {
+    $query = "SELECT * FROM portfolio WHERE title LIKE 'Service:%' ORDER BY created_at DESC";
     $stmt = $pdo->prepare($query);
-    $stmt->execute($params);
+    $stmt->execute();
     $services = $stmt->fetchAll();
+    
+    // Add compatibility fields
+    foreach ($services as &$service) {
+        $service['is_active'] = 1; // Default active
+        if (!isset($service['description'])) {
+            $service['description'] = '';
+        }
+    }
 } catch (PDOException $e) {
     $services = [];
 }

@@ -72,29 +72,28 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     
     if (empty($errors)) {
         try {
-            // Try with basic fields first
-            $stmt = $pdo->prepare("INSERT INTO services (title, description, created_at) VALUES (?, ?, NOW())");
+            // Add to portfolio table with Service prefix
+            $service_title = 'Service: ' . $title;
             
-            if ($stmt->execute([$title, $description])) {
-                $_SESSION['admin_success'] = 'Hizmet başarıyla eklendi.';
-                header("Location: index.php");
-                exit();
-            } else {
-                $errors[] = 'Hizmet eklenirken hata oluştu.';
-            }
-        } catch (PDOException $e) {
-            // If services table doesn't exist, try with contact_messages
+            // Try with different portfolio table structures
             try {
-                $stmt = $pdo->prepare("INSERT INTO contact_messages (name, subject, message, created_at) VALUES (?, ?, ?, NOW())");
-                
-                if ($stmt->execute(['Hizmet: ' . $title, 'Yeni Hizmet', $description])) {
+                $stmt = $pdo->prepare("INSERT INTO portfolio (title, created_at) VALUES (?, NOW())");
+                if ($stmt->execute([$service_title])) {
                     $_SESSION['admin_success'] = 'Hizmet başarıyla eklendi.';
                     header("Location: index.php");
                     exit();
                 }
-            } catch (PDOException $e2) {
-                $errors[] = 'Veritabanı hatası: Services tablosu bulunamadı.';
+            } catch (PDOException $e) {
+                // Try with description field
+                $stmt = $pdo->prepare("INSERT INTO portfolio (title, description, created_at) VALUES (?, ?, NOW())");
+                if ($stmt->execute([$service_title, $description])) {
+                    $_SESSION['admin_success'] = 'Hizmet başarıyla eklendi.';
+                    header("Location: index.php");
+                    exit();
+                }
             }
+        } catch (PDOException $e) {
+            $errors[] = 'Hizmet eklenirken hata oluştu. Lütfen tekrar deneyin.';
         }
     }
 }

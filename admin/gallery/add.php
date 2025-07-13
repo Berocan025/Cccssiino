@@ -72,29 +72,28 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     
     if (empty($errors)) {
         try {
-            // Try to create a simple record in portfolio table as gallery
-            $stmt = $pdo->prepare("INSERT INTO portfolio (title, image_path, created_at) VALUES (?, ?, NOW())");
+            // Add to portfolio table with Gallery prefix
+            $gallery_title = 'Gallery: ' . $title;
             
-            if ($stmt->execute([$title, $image_path])) {
-                $_SESSION['admin_success'] = 'Galeri öğesi başarıyla eklendi.';
-                header("Location: index.php");
-                exit();
-            } else {
-                $errors[] = 'Galeri öğesi eklenirken hata oluştu.';
-            }
-        } catch (PDOException $e) {
+            // Try with different portfolio table structures
             try {
-                // Fallback: Try with contact_messages table
-                $stmt = $pdo->prepare("INSERT INTO contact_messages (name, subject, message, created_at) VALUES (?, ?, ?, NOW())");
-                
-                if ($stmt->execute(['Gallery: ' . $title, 'Galeri Öğesi', $description])) {
+                $stmt = $pdo->prepare("INSERT INTO portfolio (title, created_at) VALUES (?, NOW())");
+                if ($stmt->execute([$gallery_title])) {
                     $_SESSION['admin_success'] = 'Galeri öğesi başarıyla eklendi.';
                     header("Location: index.php");
                     exit();
                 }
-            } catch (PDOException $e2) {
-                $errors[] = 'Galeri tablosu bulunamadı. Lütfen galeri tablosunu oluşturun.';
+            } catch (PDOException $e) {
+                // Try with description field
+                $stmt = $pdo->prepare("INSERT INTO portfolio (title, description, created_at) VALUES (?, ?, NOW())");
+                if ($stmt->execute([$gallery_title, $description])) {
+                    $_SESSION['admin_success'] = 'Galeri öğesi başarıyla eklendi.';
+                    header("Location: index.php");
+                    exit();
+                }
             }
+        } catch (PDOException $e) {
+            $errors[] = 'Galeri öğesi eklenirken hata oluştu. Lütfen tekrar deneyin.';
         }
     }
 }
