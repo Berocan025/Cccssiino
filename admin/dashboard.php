@@ -193,6 +193,57 @@ include 'includes/admin_header.php';
     </div>
 </div>
 
+<!-- Quick Actions -->
+<div class="row mb-4">
+    <div class="col-12">
+        <div class="card shadow">
+            <div class="card-header py-3">
+                <h6 class="m-0 font-weight-bold text-primary">Hızlı Erişim</h6>
+            </div>
+            <div class="card-body">
+                <div class="row">
+                    <div class="col-md-2 col-sm-6 mb-3">
+                        <a href="portfolio/index.php" class="btn btn-outline-primary btn-block">
+                            <i class="fas fa-briefcase mb-1"></i><br>
+                            <small>Portfolio</small>
+                        </a>
+                    </div>
+                    <div class="col-md-2 col-sm-6 mb-3">
+                        <a href="gallery/index.php" class="btn btn-outline-success btn-block">
+                            <i class="fas fa-images mb-1"></i><br>
+                            <small>Galeri</small>
+                        </a>
+                    </div>
+                    <div class="col-md-2 col-sm-6 mb-3">
+                        <a href="content/index.php" class="btn btn-outline-info btn-block">
+                            <i class="fas fa-cogs mb-1"></i><br>
+                            <small>İçerik</small>
+                        </a>
+                    </div>
+                    <div class="col-md-2 col-sm-6 mb-3">
+                        <a href="messages/index.php" class="btn btn-outline-warning btn-block">
+                            <i class="fas fa-envelope mb-1"></i><br>
+                            <small>Mesajlar</small>
+                        </a>
+                    </div>
+                    <div class="col-md-2 col-sm-6 mb-3">
+                        <a href="texts/index.php" class="btn btn-outline-secondary btn-block">
+                            <i class="fas fa-file-alt mb-1"></i><br>
+                            <small>Metinler</small>
+                        </a>
+                    </div>
+                    <div class="col-md-2 col-sm-6 mb-3">
+                        <a href="settings/index.php" class="btn btn-outline-dark btn-block">
+                            <i class="fas fa-cog mb-1"></i><br>
+                            <small>Ayarlar</small>
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
 <div class="row">
     <!-- Recent Messages -->
     <div class="col-xl-6 col-lg-6">

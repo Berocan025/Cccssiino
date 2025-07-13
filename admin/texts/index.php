@@ -42,8 +42,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if ($action === 'add_text' && isset($_POST['text_key']) && isset($_POST['text_value'])) {
         $text_key = sanitize_input($_POST['text_key']);
         $text_value = $_POST['text_value'];
-        $category = sanitize_input($_POST['category']);
-        $description = sanitize_input($_POST['description']);
+        $description = sanitize_input($_POST['description'] ?? '');
         
         // Check if key already exists
         $stmt = $pdo->prepare("SELECT id FROM site_texts WHERE text_key = ?");
@@ -52,11 +51,22 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         if ($stmt->fetch()) {
             $_SESSION['admin_error'] = 'Bu anahtar zaten mevcut.';
         } else {
-            $stmt = $pdo->prepare("INSERT INTO site_texts (text_key, text_value, category, description, created_at) VALUES (?, ?, ?, ?, NOW())");
-            if ($stmt->execute([$text_key, $text_value, $category, $description])) {
-                $_SESSION['admin_success'] = 'Yeni metin eklendi.';
-            } else {
-                $_SESSION['admin_error'] = 'Metin eklenirken hata oluştu.';
+            // Try to insert with description, if fails try without
+            try {
+                $stmt = $pdo->prepare("INSERT INTO site_texts (text_key, text_value, description, created_at) VALUES (?, ?, ?, NOW())");
+                if ($stmt->execute([$text_key, $text_value, $description])) {
+                    $_SESSION['admin_success'] = 'Yeni metin eklendi.';
+                } else {
+                    $_SESSION['admin_error'] = 'Metin eklenirken hata oluştu.';
+                }
+            } catch (PDOException $e) {
+                // If description column doesn't exist, try without it
+                $stmt = $pdo->prepare("INSERT INTO site_texts (text_key, text_value, created_at) VALUES (?, ?, NOW())");
+                if ($stmt->execute([$text_key, $text_value])) {
+                    $_SESSION['admin_success'] = 'Yeni metin eklendi.';
+                } else {
+                    $_SESSION['admin_error'] = 'Metin eklenirken hata oluştu.';
+                }
             }
         }
     }
@@ -80,17 +90,28 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 $category_filter = $_GET['category'] ?? '';
 $search = $_GET['search'] ?? '';
 
-// Get all categories
-$stmt = $pdo->query("SELECT DISTINCT category FROM site_texts ORDER BY category");
-$categories = $stmt->fetchAll(PDO::FETCH_COLUMN);
+// Get all categories - handle if category column doesn't exist
+try {
+    $stmt = $pdo->query("SELECT DISTINCT text_key FROM site_texts ORDER BY text_key");
+    $categories = [];
+    while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
+        $key_parts = explode('_', $row['text_key']);
+        if (count($key_parts) > 1) {
+            $categories[] = $key_parts[0];
+        }
+    }
+    $categories = array_unique($categories);
+} catch (PDOException $e) {
+    $categories = [];
+}
 
 // Build WHERE clause
 $where_conditions = [];
 $params = [];
 
 if (!empty($category_filter)) {
-    $where_conditions[] = 'category = ?';
-    $params[] = $category_filter;
+    $where_conditions[] = 'text_key LIKE ?';
+    $params[] = $category_filter . '_%';
 }
 
 if (!empty($search)) {
