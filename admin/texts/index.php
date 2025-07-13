@@ -128,15 +128,17 @@ if (!empty($where_conditions)) {
 }
 
 // Get texts
-$sql = "SELECT * FROM site_texts $where_clause ORDER BY category, text_key";
+$sql = "SELECT * FROM site_texts $where_clause ORDER BY text_key";
 $stmt = $pdo->prepare($sql);
 $stmt->execute($params);
 $texts = $stmt->fetchAll();
 
-// Group texts by category
+// Group texts by category (derived from text_key)
 $grouped_texts = [];
 foreach ($texts as $text) {
-    $grouped_texts[$text['category']][] = $text;
+    $key_parts = explode('_', $text['text_key']);
+    $category = $key_parts[0] ?? 'other';
+    $grouped_texts[$category][] = $text;
 }
 
 include '../includes/admin_header.php';

@@ -80,9 +80,8 @@ if ($status_filter !== '') {
 }
 
 if (!empty($search)) {
-    $where_conditions[] = '(title LIKE ? OR description LIKE ?)';
+    $where_conditions[] = 'title LIKE ?';
     $search_term = '%' . $search . '%';
-    $params[] = $search_term;
     $params[] = $search_term;
 }
 
@@ -172,7 +171,7 @@ $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
                                                 <strong><?php echo escape_output($service['title']); ?></strong>
                                             </td>
                                             <td>
-                                                <small class="text-muted"><?php echo escape_output(substr($service['description'], 0, 150)) . '...'; ?></small>
+                                                <small class="text-muted"><?php echo escape_output(substr($service['description'] ?? 'Açıklama bulunmuyor', 0, 150)) . '...'; ?></small>
                                             </td>
                                             <td>
                                                 <form method="POST" style="display: inline;">
