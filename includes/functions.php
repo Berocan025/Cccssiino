@@ -7,7 +7,7 @@
  */
 
 // Doğrudan erişimi engelle
-if (!defined('DB_HOST')) {
+if (!defined('DB_PATH')) {
     die('Direct access not allowed');
 }
 

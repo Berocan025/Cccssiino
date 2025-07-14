@@ -16,15 +16,12 @@ if (session_status() == PHP_SESSION_NONE) {
     session_start();
 }
 
-// Veritabanı bağlantı ayarları
-define('DB_HOST', 'localhost');
-define('DB_NAME', 'bonusboss');
-define('DB_USER', 'root');
-define('DB_PASS', '');
+// SQLite veritabanı ayarları
+define('DB_PATH', __DIR__ . '/../database/bonusboss.db');
 define('DB_CHARSET', 'utf8mb4');
 
 // Site ayarları
-define('SITE_URL', 'http://localhost/bonusboss'); // Production'da gerçek URL
+define('SITE_URL', 'http://localhost:8000'); // Production'da gerçek URL
 define('SITE_NAME', 'BonusBoss');
 define('SITE_TITLE', 'BonusBoss - Profesyonel Casino Yayıncısı');
 define('SITE_DESCRIPTION', 'Kazançlı ortaklıklar için doğru adres');
@@ -72,29 +69,39 @@ define('POSTS_PER_PAGE', 12);
 define('PORTFOLIO_PER_PAGE', 9);
 define('GALLERY_PER_PAGE', 20);
 
-// Veritabanı bağlantısı
+// SQLite veritabanı bağlantısı
 try {
+    // Veritabanı dosyası yoksa oluştur
+    if (!file_exists(DB_PATH)) {
+        $db_dir = dirname(DB_PATH);
+        if (!is_dir($db_dir)) {
+            mkdir($db_dir, 0755, true);
+        }
+        touch(DB_PATH);
+        chmod(DB_PATH, 0664);
+    }
+
     $pdo = new PDO(
-        "mysql:host=" . DB_HOST . ";dbname=" . DB_NAME . ";charset=" . DB_CHARSET,
-        DB_USER,
-        DB_PASS,
+        "sqlite:" . DB_PATH,
+        null,
+        null,
         array(
             PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
             PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
-            PDO::ATTR_EMULATE_PREPARES => false,
-            PDO::MYSQL_ATTR_INIT_COMMAND => "SET NAMES utf8mb4"
+            PDO::ATTR_EMULATE_PREPARES => false
         )
     );
+    
+    // SQLite pragmaları
+    $pdo->exec("PRAGMA foreign_keys = ON");
+    $pdo->exec("PRAGMA journal_mode = WAL");
+    $pdo->exec("PRAGMA synchronous = NORMAL");
+    $pdo->exec("PRAGMA cache_size = 1000");
+    $pdo->exec("PRAGMA temp_store = MEMORY");
+    
 } catch (PDOException $e) {
     die("Veritabanı bağlantı hatası: " . $e->getMessage());
 }
-
-// Mysqli bağlantısı (eski kodlar için)
-$conn = new mysqli(DB_HOST, DB_USER, DB_PASS, DB_NAME);
-if ($conn->connect_error) {
-    die("Veritabanı bağlantı hatası: " . $conn->connect_error);
-}
-$conn->set_charset("utf8mb4");
 
 // Timezone ayarı
 date_default_timezone_set('Europe/Istanbul');
@@ -108,6 +115,7 @@ if (!isset($_SESSION['csrf_token'])) {
 }
 
 // Yardımcı fonksiyonlar
+
 function escape_output($string) {
     return htmlspecialchars($string, ENT_QUOTES, 'UTF-8');
 }
@@ -118,18 +126,17 @@ function redirect($url) {
 }
 
 function is_ajax_request() {
-    return !empty($_SERVER['HTTP_X_REQUESTED_WITH']) && 
-           strtolower($_SERVER['HTTP_X_REQUESTED_WITH']) == 'xmlhttprequest';
+    return !empty($_SERVER['HTTP_X_REQUESTED_WITH']) && strtolower($_SERVER['HTTP_X_REQUESTED_WITH']) == 'xmlhttprequest';
 }
 
 function get_current_url() {
-    return (isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on' ? "https" : "http") . 
-           "://" . $_SERVER['HTTP_HOST'] . $_SERVER['REQUEST_URI'];
+    return (isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on' ? "https" : "http") . "://$_SERVER[HTTP_HOST]$_SERVER[REQUEST_URI]";
 }
 
 function get_client_ip() {
-    $ipkeys = array('HTTP_CLIENT_IP', 'HTTP_X_FORWARDED_FOR', 'REMOTE_ADDR');
-    foreach ($ipkeys as $key) {
+    $ip_keys = array('HTTP_X_FORWARDED_FOR', 'HTTP_X_REAL_IP', 'HTTP_CLIENT_IP', 'REMOTE_ADDR');
+    
+    foreach ($ip_keys as $key) {
         if (array_key_exists($key, $_SERVER) === true) {
             foreach (explode(',', $_SERVER[$key]) as $ip) {
                 $ip = trim($ip);
@@ -139,10 +146,10 @@ function get_client_ip() {
             }
         }
     }
-    return $_SERVER['REMOTE_ADDR'];
+    
+    return $_SERVER['REMOTE_ADDR'] ?? 'unknown';
 }
 
-// Güvenlik kontrolü
 function validate_csrf_token($token) {
     return isset($_SESSION['csrf_token']) && hash_equals($_SESSION['csrf_token'], $token);
 }
@@ -159,18 +166,21 @@ function validate_email($email) {
 }
 
 function validate_phone($phone) {
-    return preg_match('/^[\+]?[0-9\s\-\(\)]+$/', $phone);
+    return preg_match('/^[\+]?[0-9\s\-\(\)]{7,15}$/', $phone);
 }
 
 function generate_slug($string) {
-    $turkish = array('ş','Ş','ı','I','İ','ğ','Ğ','ü','Ü','ö','Ö','ç','Ç');
-    $english = array('s','s','i','i','i','g','g','u','u','o','o','c','c');
+    $string = trim($string);
+    $string = mb_strtolower($string, 'UTF-8');
+    
+    // Türkçe karakterleri değiştir
+    $turkish = ['ç', 'ğ', 'ı', 'ö', 'ş', 'ü'];
+    $english = ['c', 'g', 'i', 'o', 's', 'u'];
     $string = str_replace($turkish, $english, $string);
-    $string = strtolower($string);
+    
     $string = preg_replace('/[^a-z0-9\s-]/', '', $string);
     $string = preg_replace('/[\s-]+/', '-', $string);
-    $string = trim($string, '-');
-    return $string;
+    return trim($string, '-');
 }
 
 function format_date($date, $format = 'd.m.Y') {
@@ -183,14 +193,12 @@ function format_datetime($datetime, $format = 'd.m.Y H:i') {
 
 function time_ago($datetime) {
     $time = time() - strtotime($datetime);
-    
-    if ($time < 60) return 'şimdi';
+    if ($time < 60) return 'Az önce';
     if ($time < 3600) return floor($time/60) . ' dakika önce';
     if ($time < 86400) return floor($time/3600) . ' saat önce';
     if ($time < 2592000) return floor($time/86400) . ' gün önce';
-    if ($time < 31536000) return floor($time/2592000) . ' ay önce';
-    
-    return floor($time/31536000) . ' yıl önce';
+    if ($time < 31104000) return floor($time/2592000) . ' ay önce';
+    return floor($time/31104000) . ' yıl önce';
 }
 
 function file_size_format($bytes, $precision = 2) {
@@ -203,109 +211,139 @@ function file_size_format($bytes, $precision = 2) {
     return round($bytes, $precision) . ' ' . $units[$i];
 }
 
-// Maintenance mode kontrolü
 function check_maintenance_mode() {
-    $maintenance = get_setting('maintenance_mode');
-    if ($maintenance && !is_admin_logged_in()) {
-        include 'maintenance.php';
-        exit();
+    global $pdo;
+    try {
+        $stmt = $pdo->prepare("SELECT setting_value FROM settings WHERE setting_key = 'maintenance_mode'");
+        $stmt->execute();
+        $result = $stmt->fetch();
+        return $result && $result['setting_value'] == '1';
+    } catch (PDOException $e) {
+        return false;
     }
 }
 
-// Admin giriş kontrolü
 function is_admin_logged_in() {
-    return isset($_SESSION['admin_id']) && isset($_SESSION['admin_username']);
+    return isset($_SESSION['admin_logged_in']) && $_SESSION['admin_logged_in'] === true;
 }
 
 function require_admin_login() {
     if (!is_admin_logged_in()) {
-        redirect('login.php');
+        redirect('/admin/index.php');
     }
 }
 
-// İstatistikler
 function get_site_stats() {
     global $pdo;
     
-    $stats = array();
+    $stats = array(
+        'total_services' => 0,
+        'total_portfolio' => 0,
+        'total_gallery' => 0,
+        'total_messages' => 0,
+        'unread_messages' => 0
+    );
     
-    // Toplam mesaj sayısı
-    $stmt = $pdo->query("SELECT COUNT(*) as count FROM contact_messages");
-    $stats['total_messages'] = $stmt->fetch()['count'];
-    
-    // Okunmamış mesaj sayısı
-    $stmt = $pdo->query("SELECT COUNT(*) as count FROM contact_messages WHERE status = 'unread'");
-    $stats['unread_messages'] = $stmt->fetch()['count'];
-    
-    // Toplam portföy sayısı
-    $stmt = $pdo->query("SELECT COUNT(*) as count FROM portfolio WHERE status = 'active'");
-    $stats['total_portfolio'] = $stmt->fetch()['count'];
-    
-    // Toplam hizmet sayısı
-    $stmt = $pdo->query("SELECT COUNT(*) as count FROM services WHERE status = 'active'");
-    $stats['total_services'] = $stmt->fetch()['count'];
-    
-    // Toplam galeri fotoğrafı
-    $stmt = $pdo->query("SELECT COUNT(*) as count FROM gallery_photos WHERE status = 'active'");
-    $stats['total_photos'] = $stmt->fetch()['count'];
-    
-    // Toplam galeri videosu
-    $stmt = $pdo->query("SELECT COUNT(*) as count FROM gallery_videos WHERE status = 'active'");
-    $stats['total_videos'] = $stmt->fetch()['count'];
+    try {
+        // Services count
+        $stmt = $pdo->query("SELECT COUNT(*) as count FROM services WHERE status = 'active'");
+        $result = $stmt->fetch();
+        $stats['total_services'] = $result ? (int)$result['count'] : 0;
+        
+        // Portfolio count
+        $stmt = $pdo->query("SELECT COUNT(*) as count FROM portfolio WHERE status = 'active'");
+        $result = $stmt->fetch();
+        $stats['total_portfolio'] = $result ? (int)$result['count'] : 0;
+        
+        // Gallery photos count
+        $stmt = $pdo->query("SELECT COUNT(*) as count FROM gallery_photos WHERE status = 'active'");
+        $result = $stmt->fetch();
+        $gallery_photos = $result ? (int)$result['count'] : 0;
+        
+        // Gallery videos count
+        $stmt = $pdo->query("SELECT COUNT(*) as count FROM gallery_videos WHERE status = 'active'");
+        $result = $stmt->fetch();
+        $gallery_videos = $result ? (int)$result['count'] : 0;
+        
+        $stats['total_gallery'] = $gallery_photos + $gallery_videos;
+        
+        // Total messages count
+        $stmt = $pdo->query("SELECT COUNT(*) as count FROM contact_messages");
+        $result = $stmt->fetch();
+        $stats['total_messages'] = $result ? (int)$result['count'] : 0;
+        
+        // Unread messages count
+        $stmt = $pdo->query("SELECT COUNT(*) as count FROM contact_messages WHERE status = 'unread'");
+        $result = $stmt->fetch();
+        $stats['unread_messages'] = $result ? (int)$result['count'] : 0;
+        
+    } catch (PDOException $e) {
+        write_log("Stats error: " . $e->getMessage(), 'error');
+    }
     
     return $stats;
 }
 
-// Log fonksiyonu
 function write_log($message, $type = 'info') {
-    $log_file = 'logs/site_' . date('Y-m-d') . '.log';
-    $log_message = date('Y-m-d H:i:s') . ' [' . strtoupper($type) . '] ' . $message . PHP_EOL;
+    $log_file = __DIR__ . '/../logs/app.log';
+    $log_dir = dirname($log_file);
     
-    if (!is_dir('logs')) {
-        mkdir('logs', 0755, true);
+    if (!is_dir($log_dir)) {
+        mkdir($log_dir, 0755, true);
     }
     
-    file_put_contents($log_file, $log_message, FILE_APPEND | LOCK_EX);
+    $timestamp = date('Y-m-d H:i:s');
+    $log_entry = "[$timestamp] [$type] $message" . PHP_EOL;
+    
+    file_put_contents($log_file, $log_entry, FILE_APPEND | LOCK_EX);
 }
 
-// Hata yakalama
 function handle_error($errno, $errstr, $errfile, $errline) {
-    $error_message = "Error: [$errno] $errstr - $errfile:$errline";
+    $error_message = "Error: [$errno] $errstr in $errfile on line $errline";
     write_log($error_message, 'error');
     
     if (ini_get('display_errors')) {
-        echo "<div style='color: red; padding: 10px; background: #ffebee; border: 1px solid #f44336; margin: 10px;'>";
-        echo "<strong>Error:</strong> $error_message";
-        echo "</div>";
+        echo $error_message;
     }
     
-    return true;
+    return false;
 }
 
+// Error handler ayarla
 set_error_handler('handle_error');
 
-// Başlık güvenliği
-header('X-Content-Type-Options: nosniff');
-header('X-Frame-Options: DENY');
-header('X-XSS-Protection: 1; mode=block');
-header('Referrer-Policy: strict-origin-when-cross-origin');
-
-// Dosya dahil etme
-require_once 'functions.php';
-
-// Sayfa başlama zamanı (performans ölçümü için)
-define('START_TIME', microtime(true));
-
-// Bakım modu kontrolü
-check_maintenance_mode();
-
-// Oturum timeout kontrolü
-if (is_admin_logged_in()) {
-    if (isset($_SESSION['admin_last_activity']) && (time() - $_SESSION['admin_last_activity'] > ADMIN_SESSION_TIMEOUT)) {
-        session_destroy();
-        redirect('login.php?timeout=1');
+// Veritabanını başlat
+function init_database() {
+    global $pdo;
+    
+    $sql_file = __DIR__ . '/../database/bonusboss_sqlite.sql';
+    
+    if (!file_exists($sql_file)) {
+        die("SQL dosyası bulunamadı: $sql_file");
     }
-    $_SESSION['admin_last_activity'] = time();
+    
+    try {
+        // Tablolar var mı kontrol et
+        $stmt = $pdo->query("SELECT COUNT(*) as count FROM sqlite_master WHERE type='table' AND name='users'");
+        $result = $stmt->fetch();
+        
+        if (!$result || $result['count'] == 0) {
+            // Veritabanını oluştur
+            $sql = file_get_contents($sql_file);
+            $pdo->exec($sql);
+            write_log("Database initialized successfully", 'info');
+        }
+    } catch (PDOException $e) {
+        die("Veritabanı başlatma hatası: " . $e->getMessage());
+    }
+}
+
+// Veritabanını başlat
+init_database();
+
+// Functions dosyasını dahil et
+if (file_exists(__DIR__ . '/functions.php')) {
+    require_once __DIR__ . '/functions.php';
 }
 
 ?>
